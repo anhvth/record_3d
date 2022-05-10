@@ -11,54 +11,15 @@ import numpy as np
 import argparse
 from datetime import datetime
 
-# parser = argparse.ArgumentParser()
-
-def lmk2np(lmks):
-    res = []
-    for lmk in lmks:
-        res.append([lmk.x, lmk.y, lmk.z])
-    return np.array(res)
 
 
-def mediapipe_facemesh_predict(image):
+parser = argparse.ArgumentParser()
+parser.add_argument('out_dir')
+parser.add_argument('-n', default=1000, type=int)
+parser.add_argument('--with_webcam', '-w', default=1000, type=int)
+# parser.add_argument('--arguments', '-a', nargs='+', default=None)
+args = parser.parse_args()
 
-    with mp_face_mesh.FaceMesh(
-            static_image_mode=True,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5) as face_mesh:
-        results = face_mesh.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-
-        annotated_image = image.copy()
-        # Print and draw face mesh landmarks on the image.
-        if not results.multi_face_landmarks:
-            return annotated_image
-        for face_landmarks in results.multi_face_landmarks:
-            # lmk_np = lmk2np(face_landmarks.landmark)
-            # np.save(f'{args.out_np_dir}/{idx:06d}', lmk_np)
-            # if args.vis:
-            mp_drawing.draw_landmarks(
-                    image=annotated_image,
-                    landmark_list=face_landmarks,
-                    connections=mp_face_mesh.FACEMESH_TESSELATION,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=mp_drawing_styles
-                    .get_default_face_mesh_tesselation_style())
-            mp_drawing.draw_landmarks(
-                    image=annotated_image,
-                    landmark_list=face_landmarks,
-                    connections=mp_face_mesh.FACEMESH_CONTOURS,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=mp_drawing_styles
-                    .get_default_face_mesh_contours_style())
-            mp_drawing.draw_landmarks(
-                    image=annotated_image,
-                    landmark_list=face_landmarks,
-                    connections=mp_face_mesh.FACEMESH_IRISES,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=mp_drawing_styles
-                    .get_default_face_mesh_iris_connections_style())
-    return annotated_image
 
 def save_thread_function(img, depth,intrinsic_mat, name):
     mmcv.imwrite(img, f'{name}.jpg')
@@ -86,24 +47,10 @@ def vis_3d(rgbd):
     extrinsic = np.diag(np.array([-1, -1, -1, 1]))
     pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic, extrinsic
     )
-    # o3d.visualization.webrtc_server.enable_webrtc()
     o3d.visualization.draw(pcd)
-    # vis.add_geometry(pcd)
-
-    #------
-    # import ipdb; ipdb.set_trace()
-    # geometry.points = pcd.points
-    # vis.update_geometry(geometry)
-    # vis.poll_events()
-    # vis.update_renderer()
 
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('out_dir')
-parser.add_argument('-n', default=1000, type=int)
-# parser.add_argument('--arguments', '-a', nargs='+', default=None)
-args = parser.parse_args()
 
 
 class DemoApp:
@@ -178,13 +125,16 @@ class DemoApp:
             # import ipdb; ipdb.set_trace()
             webcam_bgr = mmcv.imrescale(webcam_bgr, (480, 480))
             # import ipdb; ipdb.set_trace()
-            pair = np.concatenate([rgb, webcam_bgr], 0)
+            if args.with_webcam:
+                img = np.concatenate([rgb, webcam_bgr], 0)
+            else:
+                img = rgb
 
             name = f'{out_dir}/{i:06d}'
             i+= 1
 
             # save_thread_function
-            x = threading.Thread(target=save_thread_function, args=(pair, depth, intrinsic_mat, name))
+            x = threading.Thread(target=save_thread_function, args=(img, depth, intrinsic_mat, name))
             x.start()            
             thread_list.append(x)
             self.event.clear()
