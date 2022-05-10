@@ -69,38 +69,7 @@ def mediapipe_facemesh_predict(image):
 
 
 
-def vis_3d(rgbd):
-    import open3d as o3d
-    global geometry, vis
 
-    rgb = rgbd[...,:3]/255.
-    de = rgbd[..., 3:]
-    # import ipdb; ipdb.set_trace()
-    color = o3d.cpu.pybind.geometry.Image(rgb)
-    de = 255/(de+1e-12)
-    depth = o3d.cpu.pybind.geometry.Image(de)
-    # depth_raw = o3d.io.read_image("../../test_data/RGBD/depth/00000.png")
-    rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(color, depth)#, 1, 50, False)
-
-    # with open(args.intrinsic, 'r') as f:
-    #     K = f.read().split()
-    fx,cx = 594.90771484,239.74267578
-    fy,cy = 594.90771484,319.23379517
-    
-    intrinsic = o3d.camera.PinholeCameraIntrinsic(height=480, width=640, fx=fx,fy=fy,cx=cx,cy=cy)
-    extrinsic = np.diag(np.array([-1, -1, -1, 1]))
-    pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic, extrinsic
-    )
-    # o3d.visualization.webrtc_server.enable_webrtc()
-    o3d.visualization.draw(pcd)
-    # vis.add_geometry(pcd)
-
-    #------
-    # import ipdb; ipdb.set_trace()
-    # geometry.points = pcd.points
-    # vis.update_geometry(geometry)
-    # vis.poll_events()
-    # vis.update_renderer()
 
 
 

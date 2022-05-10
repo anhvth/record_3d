@@ -16,13 +16,23 @@ from datetime import datetime
 parser = argparse.ArgumentParser()
 parser.add_argument('out_dir')
 parser.add_argument('-n', default=1000, type=int)
-parser.add_argument('--with_webcam', '-w', default=1000, type=int)
+parser.add_argument('--with_webcam', '-w', default=False, action='store_true')
 # parser.add_argument('--arguments', '-a', nargs='+', default=None)
 args = parser.parse_args()
 
 
-def save_thread_function(img, depth,intrinsic_mat, name):
+now = datetime.now()
+version = now.strftime("%b%d-%H:%M:%S")
+version = version.replace(':', '-')
+
+out_dir = osp.join(args.out_dir, version)
+
+def save_thread_function(img, depth,intrinsic_mat, i):
+    name = f'{out_dir}/rgb/{i:06d}'
+    
     mmcv.imwrite(img, f'{name}.jpg')
+    
+    name = f'{out_dir}/depth/{i:06d}'
     mmcv.dump(dict(depth=depth, intrinsic_mat=intrinsic_mat), f'{name}.pkl')
 
 def vis_3d(rgbd):
@@ -95,11 +105,8 @@ class DemoApp:
     def start_processing_stream(self):
         # intrinsic_mat = self.get_intrinsic_mat_from_coeffs(self.session.get_intrinsic_mat())
         # print(intrinsic_mat)
-        now = datetime.now()
-        version = now.strftime("%b%d-%H:%M:%S")
-        version = version.replace(':', '-')
-
-        out_dir = osp.join(args.out_dir, version)
+        
+        
         i = 0
 
         cap = cv2.VideoCapture(0)
@@ -112,6 +119,7 @@ class DemoApp:
 
             # Copy the newly arrived RGBD frame
             depth = self.session.get_depth_frame()
+            import ipdb; ipdb.set_trace()
             rgb = self.session.get_rgb_frame()
             ret, webcam_bgr = cap.read()
 
@@ -130,20 +138,21 @@ class DemoApp:
             else:
                 img = rgb
 
-            name = f'{out_dir}/{i:06d}'
-            i+= 1
+            
 
             # save_thread_function
-            x = threading.Thread(target=save_thread_function, args=(img, depth, intrinsic_mat, name))
-            x.start()            
-            thread_list.append(x)
+            th = threading.Thread(target=save_thread_function, args=(img, depth, intrinsic_mat, i))
+            th.start()            
+            thread_list.append(th)
             self.event.clear()
-            pbar.update()
+            i+= 1
             if i > args.n:
                 break
+
+            pbar.update()
         for _ in thread_list:
             _.join()
-        logger.info('Finish')
+        logger.info('Finish all')
         cap.release()
         cv2.destroyAllWindows()
 
