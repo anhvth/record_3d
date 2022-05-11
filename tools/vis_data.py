@@ -4,6 +4,7 @@ import mmcv
 import open3d as o3d
 import itertools
 from glob import glob
+import time
 
 fx,cx = 594.90771484,239.74267578
 fy,cy = 594.90771484,319.23379517
@@ -25,6 +26,21 @@ vis.create_window()
 pcd = o3d.geometry.PointCloud()
 
 from tqdm import tqdm
+
+list_points =  []
+list_rgb = []
+pbar = mmcv.ProgressBar(len(paths))
+
+
+def convert_from_uvd(u, v, d):
+    # d *= pxToMetre
+    x_over_z = (cx - u) / fx
+    y_over_z = (cy - v) / fy
+    z = d / np.sqrt(1. + x_over_z**2 + y_over_z**2)
+    x = x_over_z * z
+    y = y_over_z * z
+    return x, y, z
+
 for i, path in tqdm(enumerate(sorted(paths))):
     img = mmcv.imread(path, channel_order='rgb')[:640]
     # img.shape
@@ -34,33 +50,32 @@ for i, path in tqdm(enumerate(sorted(paths))):
     depth[depth>1.5] = 0
     # show(img)
 
-    def convert_from_uvd(u, v, d):
-        # d *= pxToMetre
-        x_over_z = (cx - u) / fx
-        y_over_z = (cy - v) / fy
-        z = d / np.sqrt(1. + x_over_z**2 + y_over_z**2)
-        x = x_over_z * z
-        y = y_over_z * z
-        return x, y, z
 
-    points = []
-    rgb = []
+    # points = []
+    # rgb = []
 
-    img = img/255.
-    for v, u in itertools.product(range(640), range(480)):
-        d = depth[v,u]
-        if d > 0.1 and d <2:
-            x,y,z = convert_from_uvd(u, v, d)    
-            points.append([x,y,z])
-            rgb.append(img[v,u])
+    # img = img/255.
+    # for v, u in itertools.product(range(640), range(480)):
+    #     d = depth[v,u]
+    #     if d > 0.1 and d <2:
+    #         x,y,z = convert_from_uvd(u, v, d)    
+    #         points.append([x,y,z])
+    #         rgb.append(img[v,u])
 
+    vv,uu = np.where(np.logical_and(depth>0.1, depth<2))
+    dd = depth[vv,uu]
+    # import ipdb; ipdb.set_trace()
+    x,y,z = convert_from_uvd(uu, vv, dd)
+    points = np.stack([x,z,y], 1)
+    rgb = img[vv,uu]/255.
 
-    pcd.points = o3d.utility.Vector3dVector(points)
-    pcd.colors = o3d.utility.Vector3dVector(rgb)
     if i == 0:
         vis.add_geometry(pcd)
     else:
         vis.update_geometry(pcd)
     vis.poll_events()
     vis.update_renderer()
+    pbar.update()
+    time.sleep(0.1)
+
 vis.destroy_window()
