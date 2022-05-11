@@ -77,6 +77,7 @@ parser.add_argument('--dump', action='store_true', default=False)
 parser.add_argument('--vis3d','-v', action='store_true', default=False)
 
 parser.add_argument('--rgbd_dir', default='data/rgbd/')
+parser.add_argument('--max_d', default=1.2, type=float)
 args = parser.parse_args()
 
 if args.vis3d:
@@ -139,8 +140,8 @@ class DemoApp:
 
             # Postprocess it
             # import ipdb; ipdb.set_trace()
-            depth[np.isnan(depth)] = 1000
-            depth[depth>1] = 255
+            depth[np.isnan(depth)] = 0
+            depth[depth>args.max_d] = 0
             # depth = 1/(depth+1e-6)
             if self.session.get_device_type() == self.DEVICE_TYPE__TRUEDEPTH:
                 depth = cv2.flip(depth, 1)
