@@ -74,9 +74,16 @@ def mediapipe_facemesh_predict(image):
 
 
 parser.add_argument('--dump', action='store_true', default=False)
+parser.add_argument('--vis3d','-v', action='store_true', default=False)
 
 parser.add_argument('--rgbd_dir', default='data/rgbd/')
 args = parser.parse_args()
+
+if args.vis3d:
+    from open3d_utils import Visualizer3D
+    vis3d = Visualizer3D()
+
+
 if args.dump:
     os.makedirs(args.rgbd_dir, exist_ok=True)
 class DemoApp:
@@ -144,16 +151,9 @@ class DemoApp:
             # Show the RGBD Stream
 
             # import ipdb; ipdb.set_trace()
-            if args.dump == True:
-                t = time.time()
-                rgbd = np.concatenate([rgb, depth[...,None]], 2)
-                out_path = f'{args.rgbd_dir}/{t}'
-                print(out_path)
-                # np.save(out_path, rgbd, )
-                # np.save(f'{args.rgbd_dir}/last', rgbd, )
-                # print(t)
-                vis_3d(rgbd)
-                break
+            if args.vis3d:
+                vis3d.visualize(rgb[...,::-1], depth)
+                
             else:
                 rgb = np.rot90(rgb)
                 depth = np.rot90(depth)
@@ -170,4 +170,3 @@ if __name__ == '__main__':
     app = DemoApp()
     app.connect_to_device(dev_idx=0)
     app.start_processing_stream()
-q
