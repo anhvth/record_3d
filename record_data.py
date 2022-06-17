@@ -119,7 +119,6 @@ class DemoApp:
 
             # Copy the newly arrived RGBD frame
             depth = self.session.get_depth_frame()
-            import ipdb; ipdb.set_trace()
             rgb = self.session.get_rgb_frame()
             ret, webcam_bgr = cap.read()
 
