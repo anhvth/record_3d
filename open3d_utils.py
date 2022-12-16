@@ -21,8 +21,11 @@ class Visualizer3D:
         self.vis = o3d.visualization.Visualizer()
         self.vis.create_window()
         self.pcd = o3d.geometry.PointCloud()
-        
         self.counter = 0
+
+    def set_intrinsics(self, fx, cx, fy, cy):
+        print('Setting intrinsics: ', fx, cx, fy, cy)
+        self.fx,self.cx,self.fy,self.cy = fx,cx,fy,cy
 
     def visualize(self, img, depth):
         depth[np.isnan(depth)] = 0
