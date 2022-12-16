@@ -13,33 +13,10 @@ from datetime import datetime
 import mediapipe as mp
 import cv2
 
-parser = argparse.ArgumentParser()
-parser.add_argument('out_dir')
-parser.add_argument('-n', default=1000, type=int)
-parser.add_argument('--with_webcam', '-w', default=False, action='store_true')
-# Show
-parser.add_argument('--show', '-s', default=False, action='store_true')
-# parser.add_argument('--arguments', '-a', nargs='+', default=None)
-args = parser.parse_args()
 
 
-now = datetime.now()
-version = now.strftime("%b%d-%H:%M:%S")
-version = version.replace(':', '-')
-
-out_dir = osp.join(args.out_dir, version)
-
-
-
-def save_thread_function(img, depth,intrinsic_mat, i):
-    name = f'{out_dir}/rgb/{i:06d}'
-    
-    mmcv.imwrite(img, f'{name}.jpg')
-    
-    name = f'{out_dir}/depth/{i:06d}'
-    mmcv.dump(dict(depth=depth, intrinsic_mat=intrinsic_mat), f'{name}.pkl')
-
-
+from open3d_utils import Visualizer3D
+vis3d = Visualizer3D()
 
 class HumanSegmentation:
     def __init__(self):
@@ -205,16 +182,11 @@ class DemoApp:
         # print(intrinsic_mat)
         
         # self.body_segmentation = HumanSegmentation()
-        i = 0
 
         cap = cv2.VideoCapture(0)
-        pbar = mmcv.ProgressBar(args.n)
-        import threading
-
-        thread_list = []
+        human_model = HumanSegmentation()
         while True:
             self.event.wait()  # Wait for new frame to arrive
-
             # Copy the newly arrived RGBD frame
             depth = self.session.get_depth_frame()
             rgb = self.session.get_rgb_frame()
@@ -244,102 +216,97 @@ class DemoApp:
                 depth = cv2.flip(depth, 1)
                 rgb = cv2.flip(rgb, 1)
 
-
-            rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             
+            body_mask = human_model(rgb)
+            rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            body_mask= body_mask==0
+            body_mask = (body_mask*255).astype(np.uint8)
+            cv2.imshow('body_mask', body_mask)
+            
+
+            # depth[body_mask==0] = 0
+            # import ipdb; ipdb.set_trace()
             # Detect and draw facemesh
-            rgb, face_landmarks_np = self.face_model(rgb, draw=False)
-            if face_landmarks_np is not None:
-                # Convert face_landmarks_np to image coordinates
-                face_landmarks_np = face_landmarks_np * np.array([w, h, 1])
-                face_landmarks_np = face_landmarks_np.astype(np.int32)
-                # Eye contours
-                # Mediapipe left eye land mark: 36-41
-                # Mediapipe right eye land mark: 42-47
+            # rgb, face_landmarks_np = self.face_model(rgb, draw=False)
+            # if face_landmarks_np is not None:
+            #     # Convert face_landmarks_np to image coordinates
+            #     face_landmarks_np = face_landmarks_np * np.array([w, h, 1])
+            #     face_landmarks_np = face_landmarks_np.astype(np.int32)
+            #     # Eye contours
+            #     # Mediapipe left eye land mark: 36-41
+            #     # Mediapipe right eye land mark: 42-47
 
-                def draw_contour(img, points, color, thickness=1):
-                    # Draw contour
-                    points_convex = cv2.convexHull(points)
-                    cv2.polylines(img, [points_convex], True, color, thickness)
-
-
-                def get_mean_depth(depth, points):
-                    points_convex = cv2.convexHull(points)
-                    # Create a zero mask and fill the convex hull with 1
-                    mask = np.zeros(depth.shape, dtype=np.uint8)
-                    cv2.fillConvexPoly(mask, points_convex, 1)
-                    # Get the mean depth of the convex hull
-                    mean_depth = np.mean(depth[mask == 1])
-                    return mean_depth
-
-                left_eye = face_landmarks_np[[130, 243, 23, 27], :2]
-
-                right_eye = face_landmarks_np[[359, 463, 253, 257], :2]
-                # import ipdb; ipdb.set_trace()
-                draw_contour(rgb, left_eye, (0, 0, 255), 1)
-                draw_contour(rgb, right_eye, (0, 0, 255), 1)
-
-                mean_depth_left_eye = get_mean_depth(depth, left_eye)
-                # mean_depth_left_eye is the distance to the camera in meters, we can use it to calculate the 3d position of the eye
-                # The 3d position of the eye is the center of the eye contour
-                # Intrinsic matrix is the camera matrix
-                # array([[434.9118042 ,   0.        , 240.229599  ],
-                #     [  0.        , 434.9118042 , 321.36166382],
-                #     [  0.        ,   0.        ,   1.        ]])
-                intrinsic_mat = fx, fy, cx, cy = 434.9118042, 434.9118042, 240.229599, 321.36166382
-                # import ipdb; ipdb.set_trace()
-
-                left_eye_x = (left_eye[0][0] + left_eye[1][0]) / 2
-                left_eye_y = (left_eye[0][1] + left_eye[1][1]) / 2
-                eye_3d_left = pixel_coordinate_to_camera_coordinate(left_eye_x, left_eye_y, mean_depth_left_eye,intrinsic_mat)
-                # Convert eye_3d_left from meters to centimeters
-                eye_3d_left = [_ * 100 for _ in eye_3d_left]
-
-                mean_depth_right_eye = get_mean_depth(depth, right_eye)
-                right_eye_x = (right_eye[0][0] + right_eye[1][0]) / 2
-                right_eye_y = (right_eye[0][1] + right_eye[1][1]) / 2
-                eye_3d_right = pixel_coordinate_to_camera_coordinate(right_eye_x, right_eye_y, mean_depth_right_eye, intrinsic_mat)
-                # Convert eye_3d_right from meters to centimeters
-                eye_3d_right = [_ * 100 for _ in eye_3d_right]
-
-                
+            #     def draw_contour(img, points, color, thickness=1):
+            #         # Draw contour
+            #         points_convex = cv2.convexHull(points)
+            #         cv2.polylines(img, [points_convex], True, color, thickness)
 
 
-                cv2.putText(rgb, 'Left eye 3d: {:.4f}, {:.4f}, {:.4f}'.format(eye_3d_left[0], eye_3d_left[1], eye_3d_left[2]),
-                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-                cv2.putText(rgb, 'Right eye 3d: {:.4f}, {:.4f}, {:.4f}'.format(eye_3d_right[0], eye_3d_right[1], eye_3d_right[2]),
-                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            #     def get_mean_depth(depth, points):
+            #         points_convex = cv2.convexHull(points)
+            #         # Create a zero mask and fill the convex hull with 1
+            #         mask = np.zeros(depth.shape, dtype=np.uint8)
+            #         cv2.fillConvexPoly(mask, points_convex, 1)
+            #         # Get the mean depth of the convex hull
+            #         mean_depth = np.mean(depth[mask == 1])
+            #         return mean_depth
 
+            #     left_eye = face_landmarks_np[[130, 243, 23, 27], :2]
 
-                # Put text mean depth to the image
-                cv2.putText(rgb, 'Left eye mean depth: {:.2f}'.format(mean_depth_left_eye),
-                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-                cv2.putText(rgb, 'Right eye mean depth: {:.2f}'.format(mean_depth_right_eye),
-                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            #     right_eye = face_landmarks_np[[359, 463, 253, 257], :2]
+            #     # import ipdb; ipdb.set_trace()
+            #     draw_contour(rgb, left_eye, (0, 0, 255), 1)
+            #     draw_contour(rgb, right_eye, (0, 0, 255), 1)
+
+            #     mean_depth_left_eye = get_mean_depth(depth, left_eye)
+            #     # mean_depth_left_eye is the distance to the camera in meters, we can use it to calculate the 3d position of the eye
+            #     # The 3d position of the eye is the center of the eye contour
+            #     # Intrinsic matrix is the camera matrix
+            #     # array([[434.9118042 ,   0.        , 240.229599  ],
+            #     #     [  0.        , 434.9118042 , 321.36166382],
+            #     #     [  0.        ,   0.        ,   1.        ]])
+            #     intrinsic_mat = fx, fy, cx, cy = 434.9118042, 434.9118042, 240.229599, 321.36166382
+            #     # import ipdb; ipdb.set_trace()
+
+            #     left_eye_x = (left_eye[0][0] + left_eye[1][0]) / 2
+            #     left_eye_y = (left_eye[0][1] + left_eye[1][1]) / 2
+            #     eye_3d_left = pixel_coordinate_to_camera_coordinate(left_eye_x, left_eye_y, mean_depth_left_eye,intrinsic_mat)
+            #     # Convert eye_3d_left from meters to centimeters
+            #     eye_3d_left = [_ * 100 for _ in eye_3d_left]
+
+            #     mean_depth_right_eye = get_mean_depth(depth, right_eye)
+            #     right_eye_x = (right_eye[0][0] + right_eye[1][0]) / 2
+            #     right_eye_y = (right_eye[0][1] + right_eye[1][1]) / 2
+            #     eye_3d_right = pixel_coordinate_to_camera_coordinate(right_eye_x, right_eye_y, mean_depth_right_eye, intrinsic_mat)
+            #     # Convert eye_3d_right from meters to centimeters
+            #     eye_3d_right = [_ * 100 for _ in eye_3d_right]
 
                 
+
+
+            #     cv2.putText(rgb, 'Left eye 3d: {:.4f}, {:.4f}, {:.4f}'.format(eye_3d_left[0], eye_3d_left[1], eye_3d_left[2]),
+            #                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            #     cv2.putText(rgb, 'Right eye 3d: {:.4f}, {:.4f}, {:.4f}'.format(eye_3d_right[0], eye_3d_right[1], eye_3d_right[2]),
+            #                 (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+
+
+            #     # Put text mean depth to the image
+            #     cv2.putText(rgb, 'Left eye mean depth: {:.2f}'.format(mean_depth_left_eye),
+            #                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            #     cv2.putText(rgb, 'Right eye mean depth: {:.2f}'.format(mean_depth_right_eye),
+            #                 (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                
+
+            vis3d.visualize(rgb[...,::-1], depth)
 
             # Imshow
-            if args.show:
+            if False:
                 cv2.imshow('rgb', rgb)
                 cv2.imshow('depth', depth)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
-
-
-            # save_thread_function
-            # th = threading.Thread(target=save_thread_function, args=(img, depth, intrinsic_mat, i))
-            # th.start()
-            # thread_list.append(th)
-
             self.event.clear()
-            i+= 1
-            if i > args.n:
-                break
 
-            pbar.update()
-        for _ in thread_list:
-            _.join()
         logger.info('Finish all')
         cap.release()
         cv2.destroyAllWindows()
